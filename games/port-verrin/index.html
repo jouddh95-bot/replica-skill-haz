@@ -49,7 +49,16 @@
   #banner p { margin: 4px 0 0; color: var(--ink); font-size: 16px; }
   #speed { bottom: 22px; right: 360px; font-size: 26px; font-weight: 800; display: none; }
   #speed small { font-size: 12px; color: var(--dim); }
-  #crosshair { left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255,255,255,0.6); }
+  #crosshair { left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255,255,255,0.75); box-shadow: 0 0 0 1px rgba(0,0,0,0.5); transition: transform 0.1s; }
+  #crosshair.aim { transform: scale(0.7); background: #fff; }
+  #hitmark { left: 50%; top: 50%; transform: translate(-50%, -52%); font-size: 26px; color: #fff; opacity: 0; font-weight: 900; }
+  #vignette { inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(170, 0, 20, 0.85) 100%); transition: opacity 0.15s; }
+  #vitals { top: 18px; left: 200px; width: 150px; }
+  #vitals .bar { height: 8px; margin: 4px 0 6px; }
+  #hpbar > i { background: linear-gradient(90deg, #3ddc84, #6cf2c2); }
+  #arbar > i { background: linear-gradient(90deg, #6aa8ff, #9fd0ff); }
+  #weapon { right: 18px; top: 150px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 15px; text-align: right; min-width: 120px; }
+  #weapon b { color: var(--gold); } #weapon span { color: var(--ink); font-variant-numeric: tabular-nums; } #weapon i { color: var(--sky); font-size: 12px; }
 
   .panel { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(5,6,10,0.55); z-index: 5; }
   .panel.open { display: flex; }
@@ -108,16 +117,20 @@
 <div class="hud" id="banner"><h2></h2><p></p></div>
 <div class="hud" id="speed"></div>
 <div class="hud" id="crosshair"></div>
+<div class="hud" id="hitmark">&#x2715;</div>
+<div class="hud" id="vignette"></div>
+<div class="hud" id="vitals"><div class="bar" id="hpbar"><i></i></div><div class="bar" id="arbar"><i></i></div></div>
+<div class="hud" id="weapon"></div>
 
 <div class="panel" id="shop"><div class="card" id="shopcard"></div></div>
 <div class="panel" id="phone"><div class="card" id="phonecard"></div></div>
 
-<div id="busted"><h2>COLLARED</h2><p id="bustedmsg"></p></div>
+<div id="busted"><h2 id="bustedtitle">COLLARED</h2><p id="bustedmsg"></p></div>
 
 <div id="title">
   <div class="inner">
     <h1>PORT VERRIN</h1>
-    <div class="tag">Glowcaps · Getaways · Territory</div>
+    <div class="tag">Glowcaps · Getaways · Gunfights · Territory</div>
     <p>You just rented a fenced yard by the Saltmarsh Docks. Grow glowcaps, a luminous swamp fungus the city council
       banned last spring, pack them into tins and move them across four districts. More sales, more turf, more heat.
       Keep the Precinct 9 cruisers off your back.</p>
@@ -128,6 +141,8 @@
       <div><kbd>Space</kbd> handbrake</div>
       <div><kbd>E</kbd> interact / enter car</div>
       <div><kbd>Tab</kbd> phone: orders, runners, turf</div>
+      <div><kbd>Right mouse</kbd> aim, <kbd>Left</kbd> attack</div>
+      <div><kbd>1-5</kbd> weapons, <kbd>R</kbd> reload</div>
       <div><kbd>H</kbd> horn</div>
       <div><kbd>Esc</kbd> close menus</div>
     </div>
@@ -141,7 +156,7 @@
 <div id="loading">Building the city...</div>
 
 <script type="importmap">
-{ "imports": { "three": "./vendor/three.module.min.js" } }
+{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/jsm/" } }
 </script>
 <script type="module" src="./src/main.js"></script>
 </body>

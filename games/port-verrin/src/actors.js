@@ -50,37 +50,61 @@ export function randomLook(rng) {
 }
 
 // ---------------- Cars ----------------
+// Cars: beveled extruded body and glass, PBR paint, glowing lamps.
+function profileGeo(pts, depth, bevel) {
+  const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) sh.lineTo(pts[i][0], pts[i][1]);
+  sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 4 });
+  g.rotateY(-Math.PI / 2); g.translate(depth / 2, 0, 0);
+  g.computeVertexNormals();
+  return g;
+}
 const CG = {
-  body: box(2.0, 0.7, 4.4), cabin: box(1.72, 0.62, 2.2), wheel: (() => { const g = new THREE.CylinderGeometry(0.4, 0.4, 0.32, 10); g.rotateZ(Math.PI / 2); return g; })(),
-  light: box(0.42, 0.18, 0.06), bar: box(0.55, 0.18, 0.4), stripe: box(2.04, 0.22, 2.2),
+  body: profileGeo([[-2.2, 0.32], [2.2, 0.32], [2.28, 0.62], [2.12, 0.92], [0.95, 1.02], [-1.9, 1.04], [-2.22, 0.9]], 1.72, 0.09),
+  cabin: profileGeo([[0.92, 0.98], [0.15, 1.52], [-1.15, 1.54], [-1.82, 1.0]], 1.5, 0.07),
+  tyre: (() => { const g = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 18); g.rotateZ(Math.PI / 2); return g; })(),
+  rim: (() => { const g = new THREE.CylinderGeometry(0.25, 0.25, 0.32, 12); g.rotateZ(Math.PI / 2); return g; })(),
+  light: new THREE.BoxGeometry(0.46, 0.14, 0.06), bar: new THREE.BoxGeometry(0.55, 0.16, 0.38), stripe: new THREE.BoxGeometry(1.96, 0.24, 1.9),
 };
-const glass = new THREE.MeshLambertMaterial({ color: 0x1e2a36 });
-const tyre = new THREE.MeshLambertMaterial({ color: 0x18181a });
-const headMat = new THREE.MeshBasicMaterial({ color: 0xfff2c8 });
-const tailMat = new THREE.MeshBasicMaterial({ color: 0xff2a3a });
-export const CAR_COLORS = [0xc0392b, 0x2e86de, 0xf5cd79, 0x10ac84, 0x8e44ad, 0xe67e22, 0xdfe6e9, 0x34495e, 0x6ab04c, 0xff7979];
+const glass = new THREE.MeshStandardMaterial({ color: 0x0b1118, metalness: 0.9, roughness: 0.08 });
+const tyre = new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 0.9 });
+const rimMat = new THREE.MeshStandardMaterial({ color: 0xb8bcc2, metalness: 1, roughness: 0.3 });
+export const headMat = new THREE.MeshBasicMaterial({ color: 0xfff2c8 });
+const tailMat = new THREE.MeshBasicMaterial({ color: 0xff2a3a }); tailMat.color.setRGB(1.6, 0.08, 0.1);
+export const burntMat = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 1 });
+const paintCache = new Map();
+function paint(c) {
+  if (!paintCache.has(c)) paintCache.set(c, new THREE.MeshStandardMaterial({ color: c, metalness: 0.55, roughness: 0.3 }));
+  return paintCache.get(c);
+}
+export const CAR_COLORS = [0xa3121f, 0x1f5fbf, 0xe8c547, 0x0f8f6a, 0x5d2e8c, 0xd8661f, 0xe9ecef, 0x22303d, 0x4f7f2f, 0x8a8f96, 0x111214];
 
 export function makeCarMesh(color, police) {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(CG.body, lambert(police ? 0xf2f2f2 : color)); body.position.y = 0.72; g.add(body);
-  const cab = new THREE.Mesh(CG.cabin, police ? lambert(0x1a2a4a) : glass); cab.position.set(0, 1.38, -0.25); g.add(cab);
-  if (police) { const st = new THREE.Mesh(CG.stripe, lambert(0x1d3a6e)); st.position.set(0, 0.72, 0.1); g.add(st); }
-  for (const [x, z] of [[-0.98, 1.4], [0.98, 1.4], [-0.98, -1.4], [0.98, -1.4]]) {
-    const w = new THREE.Mesh(CG.wheel, tyre); w.position.set(x, 0.4, z); g.add(w);
+  const body = new THREE.Mesh(CG.body, paint(police ? 0xf4f4f4 : color)); g.add(body);
+  const cab = new THREE.Mesh(CG.cabin, glass); g.add(cab);
+  if (police) { const st = new THREE.Mesh(CG.stripe, paint(0x14254d)); st.position.set(0, 0.68, 0.1); g.add(st); }
+  const wheels = [];
+  for (const [x, z] of [[-0.9, 1.38], [0.9, 1.38], [-0.9, -1.38], [0.9, -1.38]]) {
+    const w = new THREE.Group(); w.position.set(x, 0.4, z);
+    w.add(new THREE.Mesh(CG.tyre, tyre));
+    const r = new THREE.Mesh(CG.rim, rimMat); r.position.x = Math.sign(x) * 0.02; w.add(r);
+    g.add(w); wheels.push(w);
   }
-  for (const x of [-0.65, 0.65]) {
-    const h = new THREE.Mesh(CG.light, headMat); h.position.set(x, 0.8, 2.21); g.add(h);
-    const t = new THREE.Mesh(CG.light, tailMat); t.position.set(x, 0.8, -2.21); g.add(t);
+  for (const x of [-0.62, 0.62]) {
+    const h = new THREE.Mesh(CG.light, headMat); h.position.set(x, 0.74, 2.3); g.add(h);
+    const t = new THREE.Mesh(CG.light, tailMat); t.position.set(x, 0.8, -2.3); g.add(t);
   }
   let bars = null;
   if (police) {
     const red = new THREE.MeshBasicMaterial({ color: 0x551111 }), blue = new THREE.MeshBasicMaterial({ color: 0x112255 });
-    const r = new THREE.Mesh(CG.bar, red); r.position.set(-0.3, 1.78, -0.25);
-    const b = new THREE.Mesh(CG.bar, blue); b.position.set(0.3, 1.78, -0.25);
+    const r = new THREE.Mesh(CG.bar, red); r.position.set(-0.3, 1.66, -0.35);
+    const b = new THREE.Mesh(CG.bar, blue); b.position.set(0.3, 1.66, -0.35);
     g.add(r, b); bars = { red, blue };
   }
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  g.userData.bars = bars;
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.userData.bars = bars; g.userData.wheels = wheels;
   return g;
 }
 
@@ -99,6 +123,7 @@ export class Car {
     this.radius = 2.3;
     this.wait = 0; this.stuck = 0; this.reverseT = 0; this.ignoreT = 0;
     this.sirenOn = false;
+    this.hp = police ? 140 : 100; this.wrecked = false; this.burnT = 0; this.spin = 0;
     this.syncMesh();
   }
   get fx() { return Math.sin(this.heading); }
@@ -132,6 +157,8 @@ export class Car {
   syncMesh(t = 0) {
     this.mesh.position.set(this.pos.x, 0, this.pos.z);
     this.mesh.rotation.y = this.heading;
+    this.spin += this.speed * 0.016 / 0.4;
+    for (const w of this.mesh.userData.wheels) w.rotation.x = this.spin;
     const bars = this.mesh.userData.bars;
     if (bars) {
       const on = this.sirenOn, ph = Math.floor(t * 6) % 2;
@@ -140,6 +167,10 @@ export class Car {
     }
   }
   remove(scene) { scene.remove(this.mesh); }
+  wreck() {
+    this.wrecked = true; this.mode = 'wreck'; this.speed = 0; this.sirenOn = false; this.burnT = 10;
+    this.mesh.traverse((o) => { if (o.isMesh && o.material !== tyre) o.material = burntMat; });
+  }
 
   // ---------- traffic AI (lane following on the road grid) ----------
   placeOnRoad(rng, avoidX, avoidZ, minDist = 0) {

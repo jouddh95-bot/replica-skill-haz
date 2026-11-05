@@ -77,6 +77,11 @@ export class Police {
     for (const c of this.cops) {
       const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
       nearest = Math.min(nearest, d);
+      if (c.deployed) {
+        c.drive(dt, 0, 0, true, g.city); c.syncMesh(t);
+        if (this.sees(c, p.x, p.z, chasing ? 75 : 22)) seen = true;
+        continue;
+      }
       if (chasing && chasers < this.chaseTarget() && d < 260) {
         chasers++;
         c.mode = 'chase'; c.sirenOn = true;
@@ -109,8 +114,10 @@ export class Police {
         g.toast('You lost them. Lie low for a while.', 'cash');
       }
       // bust check
+      nearest = Math.min(nearest + 0, g.nearestOfficer() + 3.5);
+      for (const n of g.npcs) if (n.kind === 'cop' && !n.dead && n.state !== 'walk' && g.city.segmentClear(n.h.pos.x, n.h.pos.z, p.x, p.z) && Math.hypot(n.h.pos.x - p.x, n.h.pos.z - p.z) < 45) { seen = true; this.evade = 0; this.lastSeen = [p.x, p.z]; break; }
       const pSpeed = g.player.car ? Math.abs(g.player.car.speed) : g.player.speedNow;
-      if (nearest < 6 && pSpeed < 4 && !(inYard && !seen)) this.bust += dt;
+      if (nearest < 6 && pSpeed < 4 && !(inYard && !seen) && !g.player.human.dead) this.bust += dt;
       else this.bust = Math.max(0, this.bust - dt * 0.6);
       if (this.bust > 2.4) { this.bust = 0; g.busted(); }
     }
@@ -119,5 +126,6 @@ export class Police {
   clearAll() {
     this.wanted = 0; this.evade = 0; this.bust = 0; this.suspicion = 0; this.lastSeen = null;
     for (const c of [...this.cops]) this.removeCop(c);
+    this.game.removeOfficers?.();
   }
 }

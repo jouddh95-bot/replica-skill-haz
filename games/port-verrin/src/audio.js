@@ -41,5 +41,23 @@ export class Audio {
   phone() { this.tone(1200, 0.07, 'sine', 0.15); this.tone(1500, 0.07, 'sine', 0.15, 0.1); this.tone(1200, 0.07, 'sine', 0.15, 0.2); }
   horn() { this.tone(330, 0.3, 'sawtooth', 0.12); this.tone(415, 0.3, 'sawtooth', 0.08); }
   crash(v) { this.tone(80, 0.25, 'sawtooth', Math.min(0.25, v / 80)); }
+  _noise() {
+    if (!this._nb) {
+      const ctx = this.ctx, n = ctx.sampleRate * 1.2, b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      this._nb = b;
+    }
+    return this._nb;
+  }
+  burst(dur, freq, vol, q = 0.8) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), t0 = ctx.currentTime;
+    src.buffer = this._noise(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(f).connect(g).connect(this.master); src.start(t0, Math.random() * 0.5); src.stop(t0 + dur + 0.05);
+  }
+  gun(kind = 1, k = 1) { this.burst(0.18 * kind, 1400, 0.55 * k, 0.6); this.burst(0.25 * kind, 180, 0.6 * k, 0.9); }
+  punch() { this.burst(0.08, 300, 0.4, 1.2); }
+  explode() { this.burst(1.4, 90, 1.0, 0.5); this.burst(0.6, 600, 0.5, 0.5); }
   bad() { this.tone(220, 0.3, 'sawtooth', 0.15); this.tone(165, 0.5, 'sawtooth', 0.15, 0.25); }
 }

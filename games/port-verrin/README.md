@@ -8,7 +8,9 @@ hire runners, grow your turf and keep the Precinct 9 cruisers off your back.
 Everything is original: the city, the districts, the characters, the product,
 the look and the sound are all made in code. No paid assets, no accounts, no
 API keys. The only dependency is [three.js](https://threejs.org) (MIT), vendored
-in `vendor/` so it works offline.
+in `vendor/` so it works offline. People use the free animated soldier rig
+that ships with the three.js examples (`assets/Soldier.glb`, originally from
+Mixamo), tinted per role, with punches, swings and aiming layered on in code.
 
 ## Play
 
@@ -35,6 +37,10 @@ Desktop browser with keyboard and mouse. Your progress saves in the browser.
 | Space | Handbrake |
 | E | Interact, get in or out of a car |
 | Tab | Burner phone: orders, runners, turf, help |
+| Right mouse | Aim (over the shoulder) |
+| Left mouse | Punch, swing or shoot |
+| 1 to 5 / wheel | Fists, bat, pistol, SMG, shotgun |
+| R | Reload |
 | H | Horn |
 | Esc | Close menus |
 
@@ -54,6 +60,12 @@ Desktop browser with keyboard and mouse. Your progress saves in the browser.
    sight until the blue bar fills, or hide in your yard. If a cruiser pins you
    down while you are slow, you get collared and lose your product and some cash.
 
+7. **Fight.** Marlow's Pawn (orange marker, Docks) sells a bat, a pistol, an
+   SMG, a shotgun, ammo, body armour and medkits. Brine Rats gang members hold
+   corners in the Docks and Vesper Heights and fight back; dropping them pays
+   cash and turf. At two or more wanted dots, officers get out of their
+   cruisers and shoot. Damaged cars smoke, catch fire and explode.
+
 The final goal is 60% turf in all four districts.
 
 ## Districts
@@ -72,6 +84,10 @@ The final goal is 60% turf in all four districts.
 | `src/actors.js` | Characters, cars, car physics, traffic and pursuit AI, pedestrians |
 | `src/economy.js` | Trays, workbench, shop, orders, runners, turf, goals, saving |
 | `src/police.js` | Heat, wanted level, cruiser spawning, line of sight, evading, getting collared |
+| `src/render.js` | Physical sky, sky reflections, bloom, tone mapping, anti-aliasing |
+| `src/characters.js` | Animated people, procedural punch, swing, aim, hit and death poses, weapon models |
+| `src/combat.js` | Weapons, bullets, hit testing, muzzle flashes, tracers, blood, sparks, fire, explosions |
+| `src/npcs.js` | Civilians who flee or fight, gang members, officers on foot |
 | `src/hud.js` | HUD, minimap, shop and phone panels |
 | `src/audio.js` | Synthesized engine, siren and UI sounds (WebAudio, no files) |
 

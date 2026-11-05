@@ -50,6 +50,7 @@ export const HIDEOUT = {
 };
 export const SHOP_POINT = [-96, -137];
 export const PRECINCT_POINT = [96, -137];
+export const PAWN_POINT = [-43, 72.5];
 
 export function mulberry32(a) {
   return function () {
@@ -125,7 +126,9 @@ function windowTextures() {
   const size = 512, cell = size / TEX_CELLS;
   const a = document.createElement('canvas'); a.width = a.height = size;
   const e = document.createElement('canvas'); e.width = e.height = size;
-  const ca = a.getContext('2d'), ce = e.getContext('2d');
+  const rg = document.createElement('canvas'); rg.width = rg.height = size;
+  const ca = a.getContext('2d'), ce = e.getContext('2d'), cr = rg.getContext('2d');
+  cr.fillStyle = '#00f000'; cr.fillRect(0, 0, size, size); // G = roughness, B = metalness (glTF convention)
   ca.fillStyle = '#e8e4dc'; ca.fillRect(0, 0, size, size);
   ce.fillStyle = '#000'; ce.fillRect(0, 0, size, size);
   const rnd = mulberry32(7);
@@ -133,6 +136,7 @@ function windowTextures() {
     const x = i * cell, y = j * cell;
     ca.fillStyle = '#c9c4ba'; ca.fillRect(x, y + cell - 6, cell, 6); // floor ledge
     ca.fillStyle = '#2b3646'; ca.fillRect(x + 14, y + 12, cell - 28, cell - 26);
+    cr.fillStyle = '#002090'; cr.fillRect(x + 14, y + 12, cell - 28, cell - 26);
     ca.fillStyle = 'rgba(255,255,255,0.18)'; ca.fillRect(x + 14, y + 12, 8, cell - 26);
     if (rnd() < 0.38) {
       const warm = rnd() < 0.75;
@@ -140,9 +144,10 @@ function windowTextures() {
       ce.fillRect(x + 14, y + 12, cell - 28, cell - 26);
     }
   }
-  const ta = new THREE.CanvasTexture(a), te = new THREE.CanvasTexture(e);
-  for (const t of [ta, te]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; }
-  return [ta, te];
+  const ta = new THREE.CanvasTexture(a), te = new THREE.CanvasTexture(e), tr = new THREE.CanvasTexture(rg);
+  for (const t of [ta, te, tr]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
+  ta.colorSpace = te.colorSpace = THREE.SRGBColorSpace;
+  return [ta, te, tr];
 }
 
 export function makeSign(text, w, h, bg, fg, font = 'bold 54px Trebuchet MS') {
@@ -298,7 +303,7 @@ export class City {
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 8;
     const geo = new THREE.PlaneGeometry(2 * W, QUAY_Z + W);
-    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex }));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0 }));
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(0, 0, (QUAY_Z - W) / 2);
     mesh.receiveShadow = true;
@@ -308,7 +313,7 @@ export class City {
     // sidewalk curbs (thin raised rims, visual only)
     // water
     const water = new THREE.Mesh(new THREE.PlaneGeometry(4000, 2000),
-      new THREE.MeshPhongMaterial({ color: 0x1d5470, shininess: 90, specular: 0x88bbdd, transparent: true, opacity: 0.94 }));
+      new THREE.MeshStandardMaterial({ color: 0x0f3448, metalness: 0.35, roughness: 0.12 }));
     water.rotation.x = -Math.PI / 2; water.position.set(0, -1.4, QUAY_Z + 1000);
     this.scene.add(water); this.water = water;
     const quayWall = new THREE.Mesh(new THREE.BoxGeometry(2 * W, 1.6, 1), new THREE.MeshLambertMaterial({ color: 0x6f6e68 }));
@@ -406,8 +411,9 @@ export class City {
       }
     }
 
-    const [ta, te] = windowTextures();
-    const mat = new THREE.MeshLambertMaterial({ map: ta, emissiveMap: te, emissive: 0xffffff, emissiveIntensity: 0, vertexColors: true });
+    const [ta, te, tr] = windowTextures();
+    const mat = new THREE.MeshStandardMaterial({ map: ta, emissiveMap: te, emissive: 0xffffff, emissiveIntensity: 0, vertexColors: true,
+      roughnessMap: tr, metalnessMap: tr, roughness: 1, metalness: 1 });
     this.buildingMat = mat;
     const mesh = new THREE.Mesh(gb.build(), mat);
     mesh.castShadow = true; mesh.receiveShadow = true;
@@ -440,6 +446,7 @@ export class City {
     f(H.x1 - 0.4, H.z0, H.x1, H.z1);
     gb.box(H.x0 + 0.4, 0, 103, -156, 6, H.z1 - 0.4, shed, { windows: false, roof: new THREE.Color(0x3a3f45) });
     this.addCollider(H.x0 + 0.4, 103, -156, H.z1 - 0.4);
+    const ps = makeSign("MARLOW'S PAWN", 12, 2.4, '#3a0f12', '#ffcf5a'); ps.position.set(-43, 4.2, 74.9); ps.rotation.y = Math.PI; this.scene.add(ps);
     const s = makeSign('VERRIN YARD 7', 10, 2, '#2a2418', '#ffd166', 'bold 64px Trebuchet MS');
     s.position.set(-160, 3.6, H.z0 - 0.05); s.rotation.y = Math.PI; this.scene.add(s);
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4.6, 0.3), new THREE.MeshLambertMaterial({ color: 0x333333 }));
@@ -546,8 +553,8 @@ export class City {
   }
 
   setNight(n) {
-    this.buildingMat.emissiveIntensity = n * 0.95;
-    this.lampMat.color.setRGB(0.33 + n * 0.67, 0.33 + n * 0.5, 0.33 + n * 0.2);
-    this.poolMat.opacity = n * 0.55;
+    this.buildingMat.emissiveIntensity = n * 1.1;
+    this.lampMat.color.setRGB(0.33 + n * 1.8, 0.33 + n * 1.4, 0.33 + n * 0.7);
+    this.poolMat.opacity = n * 0.35;
   }
 }

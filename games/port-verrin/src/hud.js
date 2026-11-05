@@ -1,6 +1,7 @@
 // DOM HUD, minimap, shop and phone panels.
 import { DISTRICTS, HIDEOUT, SHOP_POINT, W, QUAY_Z } from './city.js';
-import { SHOP_ITEMS } from './economy.js';
+import { SHOP_ITEMS, PAWN_ITEMS } from './economy.js';
+import { WEAPONS } from './combat.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -9,7 +10,8 @@ export class Hud {
     this.game = game;
     this.el = { money: $('money'), inv: $('inv'), goal: $('goal'), wanted: $('wanted'), heat: $('heatbar').firstElementChild,
       heatLabel: $('heatlabel'), evadeBar: $('evadebar'), evadeFill: $('evadebar').firstElementChild, evadeLabel: $('evadelabel'),
-      clock: $('clock'), district: $('district'), prompt: $('prompt'), toasts: $('toasts'), banner: $('banner'), speed: $('speed') };
+      clock: $('clock'), district: $('district'), prompt: $('prompt'), toasts: $('toasts'), banner: $('banner'), speed: $('speed'),
+      hp: $('hpbar').firstElementChild, ar: $('arbar').firstElementChild, weapon: $('weapon'), cross: $('crosshair'), hit: $('hitmark'), vig: $('vignette') };
     this.map = $('minimap'); this.mctx = this.map.getContext('2d');
     this.phoneTab = 'orders';
     this.shopOpen = false; this.phoneOpen = false;
@@ -60,9 +62,20 @@ export class Hud {
     if (d !== this._lastDistrict) { if (this._lastDistrict >= 0) this.banner(DISTRICTS[d].name.toUpperCase(), DISTRICTS[d].blurb, 2200); this._lastDistrict = d; }
     if (g.player.car) { this.el.speed.style.display = 'block'; this.el.speed.innerHTML = Math.round(Math.abs(g.player.car.speed) * 3.6) + ' <small>km/h</small>'; }
     else this.el.speed.style.display = 'none';
+    this.el.hp.style.width = Math.max(0, s.health) + '%';
+    this.el.ar.style.width = (s.armor * 2) + '%';
+    const wid = s.weapon || 'fists', wpn = WEAPONS[wid];
+    this.el.weapon.innerHTML = `<b>${wpn.name}</b>` + (wpn.melee ? '' : ` <span>${(s.clip && s.clip[wid]) || 0} / ${(s.ammo && s.ammo[wid]) || 0}</span>`) + (g.arsenal.reloadT > 0 ? ' <i>reloading</i>' : '');
+    this.el.cross.style.display = g.player.car || g.player.human.dead ? 'none' : 'block';
+    this.el.cross.classList.toggle('aim', !!g.aiming);
+    this._hitT = Math.max(0, (this._hitT || 0) - dt); this.el.hit.style.opacity = this._hitT > 0 ? 1 : 0;
+    this._dmgT = Math.max(0, (this._dmgT || 0) - dt); this.el.vig.style.opacity = Math.min(0.8, this._dmgT * 2) + (s.health < 30 ? 0.25 : 0);
     this._minimap(g.time);
     if (this.phoneOpen) { this._phoneT = (this._phoneT || 0) - dt; if (this._phoneT <= 0) { this._phoneT = 0.5; this.renderPhone(); } }
   }
+
+  hitMarker() { this._hitT = 0.15; }
+  damageFlash() { this._dmgT = 0.45; }
 
   // ---------- minimap ----------
   _minimap(t) {
@@ -83,6 +96,8 @@ export class Hud {
     };
     dot(-160, 96, '#ffd166', 9);
     dot(SHOP_POINT[0], SHOP_POINT[1], '#6cf2c2', 8);
+    dot(-43, 72.5, '#ff9a6b', 8);
+    for (const n of g.npcs) if (!n.dead && (n.kind === 'cop' || (n.kind === 'gang' && n.state === 'shoot'))) dot(n.h.pos.x, n.h.pos.z, n.kind === 'cop' ? '#5aa0ff' : '#ff4040', 4, false);
     for (const o of g.eco.orders) dot(o.c.x, o.c.z, '#c792ff', 8);
     g.eco.s.dealers.forEach((dl, d) => {
       if (dl.hired || g.eco.s.control[d] >= 20) { const [x, z] = g.eco.dealerSpots[d]; dot(x, z, dl.hired ? '#7fd3ff' : '#ffffff', 7); }
@@ -103,8 +118,9 @@ export class Hud {
   }
   anyOpen() { return this.shopOpen || this.phoneOpen; }
 
-  openShop() {
+  openShop(kind = 'garden') {
     this.closePanels();
+    this.shopKind = kind;
     this.shopOpen = true; $('shop').classList.add('open');
     document.exitPointerLock?.();
     this.renderShop();
@@ -112,13 +128,14 @@ export class Hud {
   renderShop() {
     const eco = this.game.eco, s = eco.s;
     const card = $('shopcard');
-    card.innerHTML = `<button class="ghost close" data-close>Close (Esc)</button><h3>Fern & Spore Garden Supply</h3>
-      <div class="sub">"We sell spores for mushroom crafts. What you do with them is your business." · You have $${Math.floor(s.money)}</div>` +
-      SHOP_ITEMS.map((it, i) => {
+    const pawn = this.shopKind === 'pawn', items = pawn ? PAWN_ITEMS : SHOP_ITEMS;
+    card.innerHTML = `<button class="ghost close" data-close>Close (Esc)</button><h3>${pawn ? "Marlow's Pawn" : 'Fern & Spore Garden Supply'}</h3>
+      <div class="sub">${pawn ? '"No receipts, no questions, no refunds."' : '"We sell spores for mushroom crafts. What you do with them is your business."'} · You have $${Math.floor(s.money)}</div>` +
+      items.map((it, i) => {
         const ok = s.money >= it.price && (!it.can || it.can(s));
         return `<div class="row"><div><div>${it.name}</div><div class="meta">${it.desc}</div></div><button data-buy="${i}" ${ok ? '' : 'disabled'}>$${it.price}</button></div>`;
       }).join('');
-    card.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => { eco.buy(SHOP_ITEMS[+b.dataset.buy]); this.renderShop(); }));
+    card.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => { eco.buy(items[+b.dataset.buy]); this.renderShop(); }));
     card.querySelector('[data-close]').addEventListener('click', () => this.closePanels());
   }
 
@@ -155,6 +172,9 @@ export class Hud {
         5. Each deal adds heat. Above 40 heat, cruisers that see you will start a chase. Break line of sight until the blue bar fills, or hide in your yard.<br>
         6. If a cruiser pins you down while you're slow, you get collared: you lose your product and some cash.<br>
         7. At 20% turf a runner offers to work that district. Keep them stocked and collect.<br>
+        8. Marlow's Pawn (orange) sells a bat, guns, ammo, armour and medkits. Right mouse aims, left mouse attacks, 1 to 5 or the wheel switch weapons, R reloads.<br>
+        9. Brine Rats (red) hold corners in the Docks and Vesper Heights. Get close and they fight. Take them down for cash and turf.<br>
+        At two or more wanted dots, officers get out and shoot. Damaged cars catch fire and explode.<br>
         Press E next to any car to take it. Space is the handbrake.</div></div>`;
     }
     const card = $('phonecard');

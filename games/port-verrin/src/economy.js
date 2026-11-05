@@ -1,7 +1,9 @@
 // The underground business: growing, packing, orders, runners, turf, saves.
 import * as THREE from 'three';
-import { DISTRICTS, HIDEOUT, SHOP_POINT, districtAt, mulberry32 } from './city.js';
-import { makeCharacter, randomLook } from './actors.js';
+import { DISTRICTS, HIDEOUT, SHOP_POINT, PAWN_POINT, districtAt, mulberry32 } from './city.js';
+import { WEAPONS } from './combat.js';
+import { randomLook } from './actors.js';
+import { Human } from './characters.js';
 
 const SAVE_KEY = 'port-verrin-save-v1';
 export const GROW_TIME = 45;
@@ -16,6 +18,16 @@ export const SHOP_ITEMS = [
   { id: 'bench', name: 'Bench upgrade', desc: 'Packs twice as fast, 10 per batch.', price: 600, can: (s) => s.benchLevel < 2, give: (s) => { s.benchLevel = 2; } },
 ];
 
+const gun = (id) => ({ id, name: WEAPONS[id].name, desc: id === 'bat' ? 'Aluminium. Hits hard, never runs dry.' : `Comes with a full magazine of ${WEAPONS[id].mag}.`, price: WEAPONS[id].price,
+  can: (s) => !s.weapons[id], give: (s) => { s.weapons[id] = true; if (WEAPONS[id].mag) s.clip[id] = WEAPONS[id].mag; s.weapon = id; } });
+const ammo = (id) => ({ id: id + '-ammo', name: `${WEAPONS[id].name} ammo x${WEAPONS[id].ammoPack}`, desc: 'Reload with R.', price: WEAPONS[id].ammoPrice,
+  can: (s) => !!s.weapons[id], give: (s) => { s.ammo[id] = (s.ammo[id] || 0) + WEAPONS[id].ammoPack; } });
+export const PAWN_ITEMS = [
+  gun('bat'), gun('pistol'), ammo('pistol'), gun('shotgun'), ammo('shotgun'), gun('smg'), ammo('smg'),
+  { id: 'armor', name: 'Body armour', desc: 'Soaks up 50 damage before your health.', price: 300, can: (s) => s.armor < 50, give: (s) => { s.armor = 50; } },
+  { id: 'med', name: 'Field medkit', desc: 'Back to full health right now.', price: 120, can: (s) => s.health < 100, give: (s) => { s.health = 100; } },
+];
+
 const FIRST = ['Mags', 'Tobin', 'Ines', 'Rook', 'Dell', 'Priya', 'Oskar', 'June', 'Fitz', 'Wren', 'Caspian', 'Lula', 'Benno', 'Sable', 'Arlo', 'Nadia', 'Quill', 'Hester'];
 const LAST = ['Vane', 'Okafor', 'Marsh', 'Calder', 'Ruiz', 'Petrov', 'Hale', 'Moreau', 'Lindqvist', 'Bello', 'Strand', 'Kaur'];
 
@@ -27,6 +39,7 @@ function freshState() {
     control: [0, 0, 0, 0],
     dealers: DISTRICTS.map(() => ({ hired: false, stock: 0, cash: 0, t: 0 })),
     earned: 0, sales: 0, heat: 0, time: 0.36, day: 1, goal: 0, won: false,
+    weapons: {}, ammo: {}, clip: {}, weapon: 'fists', health: 100, armor: 0,
   };
 }
 
@@ -58,6 +71,7 @@ export class Economy {
       if (!raw) return false;
       const data = JSON.parse(raw);
       this.s = Object.assign(freshState(), data);
+      if (this.s.health <= 0) this.s.health = 100;
       this.s.bench = { busy: false, t: 0, qty: 0 };
       this._syncTrayMeshes();
       return true;
@@ -126,9 +140,8 @@ export class Economy {
 
   _buildDealers() {
     this.dealerMeshes = this.dealerSpots.map(([x, z], d) => {
-      const m = makeCharacter({ skin: [0x8d5524, 0xf1c27d, 0xc68642, 0xe0ac69][d], top: 0x1b1b1b, pants: 0x3d405b, hair: 0x1b1b1b });
-      m.position.set(x, 0, z); m.visible = false;
-      this.game.scene.add(m);
+      const m = new Human(this.game.scene, { tint: [0x5a7a5a, 0x7a5a8a, 0x8a7a4a, 0x4a6a8a][d] });
+      m.pos.set(x, 0, z); m.group.visible = false;
       return m;
     });
   }
@@ -160,14 +173,15 @@ export class Economy {
     }
     for (const o of this.orders) o.left -= dt;
     const expired = this.orders.filter((o) => o.left <= 0);
-    for (const o of expired) { o.c.busy = false; this.game.toast(`${o.c.name} stopped waiting.`, 'bad'); this.game.removeMarker(o.marker); }
+    for (const o of expired) { o.c.busy = false; this.game.toast(`${o.c.name} stopped waiting.`, 'bad'); this.game.removeMarker(o.marker); o.npc.remove(); }
     this.orders = this.orders.filter((o) => o.left > 0);
     const pl = this.game.playerPos();
-    for (const o of this.orders) o.npc.rotation.y = Math.atan2(pl.x - o.c.x, pl.z - o.c.z);
+    for (const o of this.orders) { o.npc.heading = Math.atan2(pl.x - o.c.x, pl.z - o.c.z); o.npc.update(dt, 0); }
+    for (const m of this.dealerMeshes) if (m.group.visible) { m.heading = Math.atan2(pl.x - m.pos.x, pl.z - m.pos.z); m.update(dt, 0); }
 
     // dealers
     s.dealers.forEach((dl, d) => {
-      this.dealerMeshes[d].visible = dl.hired;
+      this.dealerMeshes[d].group.visible = dl.hired;
       if (!dl.hired || dl.stock <= 0) return;
       dl.t += dt;
       if (dl.t >= 16) {
@@ -190,9 +204,8 @@ export class Economy {
     const c = (pool.length ? pool : free)[Math.floor(this.rng() * (pool.length ? pool : free).length)];
     c.busy = true;
     const qty = 1 + Math.floor(this.rng() * (early ? 2 : 4));
-    const npc = makeCharacter(c.look);
-    npc.position.set(c.x, 0, c.z);
-    this.game.scene.add(npc);
+    const npc = new Human(this.game.scene, { tint: [0xd9c7a8, 0xa8c4d9, 0xc9a8d9, 0xb5d9a8][c.d] });
+    npc.pos.set(c.x, 0, c.z);
     const marker = this.game.addMarker(c.x, c.z, 0xc792ff);
     const o = { c, qty, price: this.unitPrice(c.d), left: 170, npc, marker };
     this.orders.push(o);
@@ -240,7 +253,8 @@ export class Economy {
         this.game.audio.blip(440);
       },
     });
-    out.push({ x: SHOP_POINT[0], z: SHOP_POINT[1], r: 3.5, label: () => 'Shop at Fern & Spore', action: () => this.game.hud.openShop() });
+    out.push({ x: SHOP_POINT[0], z: SHOP_POINT[1], r: 3.5, label: () => 'Shop at Fern & Spore', action: () => this.game.hud.openShop('garden') });
+    out.push({ x: PAWN_POINT[0], z: PAWN_POINT[1], r: 3.5, label: () => "Browse Marlow's Pawn (weapons)", action: () => this.game.hud.openShop('pawn') });
     for (const o of this.orders) {
       out.push({
         x: o.c.x, z: o.c.z, r: 2.6,
@@ -288,7 +302,7 @@ export class Economy {
     o.c.busy = false;
     this.game.removeMarker(o.marker);
     const npc = o.npc;
-    setTimeout(() => this.game.scene.remove(npc), 4000);
+    setTimeout(() => npc.remove(), 4000);
     this.orders = this.orders.filter((x) => x !== o);
     this.save();
   }
