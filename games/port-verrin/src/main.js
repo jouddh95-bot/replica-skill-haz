@@ -136,7 +136,7 @@ class Game {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
     const canvas = $('view');
-    canvas.addEventListener('click', () => { if (this.running && !this.hud.anyOpen()) canvas.requestPointerLock?.(); });
+    canvas.addEventListener('click', () => { if (this.running && !this.hud.anyOpen()) try { const r = canvas.requestPointerLock?.(); r?.catch?.(() => {}); } catch { /* pointer lock not available */ } });
     let drag = false;
     canvas.addEventListener('mousedown', () => { drag = true; });
     window.addEventListener('mouseup', () => { drag = false; });
