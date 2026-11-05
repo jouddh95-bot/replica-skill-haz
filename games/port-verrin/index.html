@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Port Verrin</title>
+<style>
+  :root {
+    --ink: #f4f1ea; --dim: #b9b4a8; --panel: rgba(14, 16, 22, 0.86); --line: rgba(255,255,255,0.12);
+    --gold: #ffd166; --mint: #6cf2c2; --rose: #ff6b8b; --sky: #7fd3ff; --violet: #c792ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d12; color: var(--ink);
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; }
+  canvas#view { display: block; width: 100vw; height: 100vh; }
+  .hud { position: fixed; pointer-events: none; text-shadow: 0 2px 4px rgba(0,0,0,0.7); }
+  #money { top: 16px; left: 18px; font-size: 30px; font-weight: 800; color: var(--mint); letter-spacing: 0.5px; }
+  #inv { top: 56px; left: 18px; font-size: 14px; line-height: 1.55; color: var(--ink); background: var(--panel);
+    padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); min-width: 170px; }
+  #inv b { color: var(--gold); font-weight: 700; float: right; margin-left: 16px; }
+  #heatbox { top: 16px; right: 18px; width: 240px; text-align: right; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px 10px; }
+  #wanted { font-size: 22px; letter-spacing: 6px; height: 28px; }
+  #wanted .on { color: var(--rose); animation: blink 0.5s steps(2) infinite; }
+  #wanted .off { color: rgba(255,255,255,0.18); }
+  @keyframes blink { 50% { color: var(--sky); } }
+  .bar { height: 10px; background: rgba(255,255,255,0.12); border-radius: 6px; overflow: hidden; margin-top: 4px; }
+  .bar > i { display: block; height: 100%; width: 0%; border-radius: 6px; transition: width 0.2s; }
+  #heatbar > i { background: linear-gradient(90deg, #ffd166, #ff6b8b); }
+  #heatlabel, #evadelabel, #clock { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  #evadebar > i { background: var(--sky); }
+  #clock { font-size: 14px; color: var(--ink); }
+  #minimap { bottom: 18px; left: 18px; width: 210px; height: 210px; border-radius: 14px; border: 2px solid var(--line);
+    background: #10141b; }
+  #district { bottom: 236px; left: 18px; font-size: 13px; color: var(--dim); }
+  #district b { color: var(--ink); font-size: 15px; }
+  #prompt { left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line);
+    padding: 10px 16px; border-radius: 10px; font-size: 16px; display: none; white-space: nowrap; }
+  #prompt kbd, .keys kbd { background: var(--gold); color: #111; border-radius: 4px; padding: 1px 6px; font-weight: 800; font-family: inherit; }
+  #goal { top: 16px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line);
+    padding: 8px 14px; border-radius: 10px; font-size: 14px; max-width: 520px; text-align: center; }
+  #goal span { color: var(--gold); font-weight: 700; margin-right: 6px; }
+  #toasts { right: 18px; bottom: 18px; width: 320px; display: flex; flex-direction: column-reverse; gap: 8px; }
+  .toast { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--gold); padding: 9px 12px;
+    border-radius: 8px; font-size: 14px; animation: slide 0.25s ease-out; }
+  .toast.cash { border-left-color: var(--mint); } .toast.bad { border-left-color: var(--rose); } .toast.phone { border-left-color: var(--violet); }
+  @keyframes slide { from { transform: translateX(40px); opacity: 0; } }
+  #banner { top: 34%; left: 50%; transform: translate(-50%, -50%); text-align: center; opacity: 0; transition: opacity 0.6s; }
+  #banner h2 { margin: 0; font-size: 44px; letter-spacing: 3px; color: var(--gold); }
+  #banner p { margin: 4px 0 0; color: var(--ink); font-size: 16px; }
+  #speed { bottom: 22px; right: 360px; font-size: 26px; font-weight: 800; display: none; }
+  #speed small { font-size: 12px; color: var(--dim); }
+  #crosshair { left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255,255,255,0.75); box-shadow: 0 0 0 1px rgba(0,0,0,0.5); transition: transform 0.1s; }
+  #crosshair.aim { transform: scale(0.7); background: #fff; }
+  #hitmark { left: 50%; top: 50%; transform: translate(-50%, -52%); font-size: 26px; color: #fff; opacity: 0; font-weight: 900; }
+  #vignette { inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(170, 0, 20, 0.85) 100%); transition: opacity 0.15s; }
+  #vitals { top: 18px; left: 200px; width: 150px; }
+  #vitals .bar { height: 8px; margin: 4px 0 6px; }
+  #hpbar > i { background: linear-gradient(90deg, #3ddc84, #6cf2c2); }
+  #arbar > i { background: linear-gradient(90deg, #6aa8ff, #9fd0ff); }
+  #weapon { right: 18px; top: 150px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 15px; text-align: right; min-width: 120px; }
+  #weapon b { color: var(--gold); } #weapon span { color: var(--ink); font-variant-numeric: tabular-nums; } #weapon i { color: var(--sky); font-size: 12px; }
+
+  .panel { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(5,6,10,0.55); z-index: 5; }
+  .panel.open { display: flex; }
+  .card { background: #141821; border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; width: min(560px, calc(100vw - 32px));
+    max-height: calc(100vh - 40px); overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .card h3 { margin: 0 0 4px; font-size: 22px; color: var(--gold); }
+  .card .sub { color: var(--dim); font-size: 13px; margin-bottom: 14px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .row .meta { color: var(--dim); font-size: 12px; }
+  button { font: inherit; background: var(--gold); color: #141414; border: 0; border-radius: 8px; padding: 7px 14px; font-weight: 800; cursor: pointer; }
+  button:disabled { background: #3a3f4a; color: #8a8f99; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tabs button { background: transparent; color: var(--dim); border: 1px solid var(--line); }
+  .tabs button.on { background: var(--violet); color: #141414; border-color: var(--violet); }
+  .tbar { height: 8px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; width: 160px; }
+  .tbar > i { display: block; height: 100%; }
+  .close { float: right; }
+
+  #title { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 50% 30%, #2a1f3d 0%, #0b0d12 70%); }
+  #title .inner { text-align: center; padding: 16px; max-width: 640px; }
+  #title h1 { font-size: clamp(44px, 9vw, 88px); margin: 0; letter-spacing: 6px; line-height: 1;
+    background: linear-gradient(180deg, #ffd166, #ff6b8b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #title .tag { color: var(--sky); letter-spacing: 4px; margin: 10px 0 22px; font-size: 14px; text-transform: uppercase; }
+  #title p { color: var(--dim); line-height: 1.6; font-size: 15px; }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; text-align: left; font-size: 13px; color: var(--ink);
+    background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin: 18px 0; }
+  #title .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  #title button { font-size: 18px; padding: 12px 26px; }
+  #busted { position: fixed; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; flex-direction: column;
+    background: rgba(20, 4, 10, 0.72); text-align: center; }
+  #busted h2 { font-size: 64px; margin: 0; color: var(--rose); letter-spacing: 6px; }
+  #busted p { color: var(--ink); font-size: 17px; }
+  #loading { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); color: var(--dim); font-size: 13px; z-index: 11; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div class="hud" id="money">$0</div>
+<div class="hud" id="inv"></div>
+<div class="hud" id="goal"></div>
+<div class="hud" id="heatbox">
+  <div id="wanted"></div>
+  <div class="bar" id="heatbar"><i></i></div>
+  <div id="heatlabel">Heat</div>
+  <div class="bar" id="evadebar" style="display:none"><i></i></div>
+  <div id="evadelabel" style="display:none">Lose them</div>
+  <div id="clock"></div>
+</div>
+<div class="hud" id="district"></div>
+<canvas class="hud" id="minimap" width="420" height="420"></canvas>
+<div class="hud" id="prompt"></div>
+<div class="hud" id="toasts"></div>
+<div class="hud" id="banner"><h2></h2><p></p></div>
+<div class="hud" id="speed"></div>
+<div class="hud" id="crosshair"></div>
+<div class="hud" id="hitmark">&#x2715;</div>
+<div class="hud" id="vignette"></div>
+<div class="hud" id="vitals"><div class="bar" id="hpbar"><i></i></div><div class="bar" id="arbar"><i></i></div></div>
+<div class="hud" id="weapon"></div>
+
+<div class="panel" id="shop"><div class="card" id="shopcard"></div></div>
+<div class="panel" id="phone"><div class="card" id="phonecard"></div></div>
+
+<div id="busted"><h2 id="bustedtitle">COLLARED</h2><p id="bustedmsg"></p></div>
+
+<div id="title">
+  <div class="inner">
+    <h1>PORT VERRIN</h1>
+    <div class="tag">Glowcaps · Getaways · Gunfights · Territory</div>
+    <p>You just rented a fenced yard by the Saltmarsh Docks. Grow glowcaps, a luminous swamp fungus the city council
+      banned last spring, pack them into tins and move them across four districts. More sales, more turf, more heat.
+      Keep the Precinct 9 cruisers off your back.</p>
+    <div class="keys">
+      <div><kbd>W A S D</kbd> move / drive</div>
+      <div><kbd>Mouse</kbd> look (click to lock)</div>
+      <div><kbd>Shift</kbd> sprint</div>
+      <div><kbd>Space</kbd> handbrake</div>
+      <div><kbd>E</kbd> interact / enter car</div>
+      <div><kbd>Tab</kbd> phone: orders, runners, turf</div>
+      <div><kbd>Right mouse</kbd> aim, <kbd>Left</kbd> attack</div>
+      <div><kbd>1-5</kbd> weapons, <kbd>R</kbd> reload</div>
+      <div><kbd>H</kbd> horn</div>
+      <div><kbd>Esc</kbd> close menus</div>
+    </div>
+    <div class="btns">
+      <button id="btn-continue" style="display:none">Continue</button>
+      <button id="btn-new">New game</button>
+    </div>
+    <p style="font-size:12px;margin-top:18px">Desktop browser with keyboard and mouse. Everything here is procedural and original. Free forever.</p>
+  </div>
+</div>
+<div id="loading">Building the city...</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/jsm/" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
